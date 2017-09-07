@@ -60,7 +60,7 @@ typedef enum
 
 /*******************************Start of Global variable section *********************/
 STATE state=STATE0;
-RGB_STATE rgb_state=C0;
+RGB_STATE rgb_state=C7;
 
 
 int statusLedPin = 13; // LED connected to digital pin 13
@@ -126,63 +126,111 @@ void change_rgb_state()
   {
     case C0:
         rgb_state=C1;
-        digitalWrite(rLedPin, HIGH);
-        digitalWrite(gLedPin, HIGH);
-        digitalWrite(bLedPin, HIGH);
+//        digitalWrite(rLedPin, HIGH);
+//        digitalWrite(gLedPin, HIGH);
+//        digitalWrite(bLedPin, HIGH);
+        analogWrite(rLedPin,255);
+        analogWrite(gLedPin,255);
+        analogWrite(bLedPin,255);
+        rNorm=0;
+        gNorm=0;
+        bNorm=0;
         break;
     case C1:
         rgb_state=C2;
-        digitalWrite(rLedPin, HIGH);
-        digitalWrite(gLedPin, HIGH);
-        digitalWrite(bLedPin, LOW);
+//        digitalWrite(rLedPin, HIGH);
+//        digitalWrite(gLedPin, HIGH);
+//        digitalWrite(bLedPin, LOW);
+        analogWrite(rLedPin,255);
+        analogWrite(gLedPin,255);
+        analogWrite(bLedPin,0);
+        rNorm=0;
+        gNorm=0;
+        bNorm=1;
         break;
     case C2:
         rgb_state=C3;
-        digitalWrite(rLedPin, HIGH);
-        digitalWrite(gLedPin, LOW);
-        digitalWrite(bLedPin, HIGH);
+//        digitalWrite(rLedPin, HIGH);
+//        digitalWrite(gLedPin, LOW);
+//        digitalWrite(bLedPin, HIGH);
+        analogWrite(rLedPin,255);
+        analogWrite(gLedPin,0);
+        analogWrite(bLedPin,255);
+        rNorm=0;
+        gNorm=1;
+        bNorm=0;
         break;
     case C3:
         rgb_state=C4;
-        digitalWrite(rLedPin, HIGH);
-        digitalWrite(gLedPin, LOW);
-        digitalWrite(bLedPin, LOW);
+//        digitalWrite(rLedPin, HIGH);
+//        digitalWrite(gLedPin, LOW);
+//        digitalWrite(bLedPin, LOW);
+        analogWrite(rLedPin,255);
+        analogWrite(gLedPin,0);
+        analogWrite(bLedPin,0);
+        rNorm=0;
+        gNorm=1;
+        bNorm=1;
         break;
     case C4:
         rgb_state=C5;
-        digitalWrite(rLedPin, LOW);
-        digitalWrite(gLedPin, HIGH);
-        digitalWrite(bLedPin, HIGH);
+//        digitalWrite(rLedPin, LOW);
+//        digitalWrite(gLedPin, HIGH);
+//        digitalWrite(bLedPin, HIGH);
+        analogWrite(rLedPin,0);
+        analogWrite(gLedPin,255);
+        analogWrite(bLedPin,255);
+        rNorm=1;
+        gNorm=0;
+        bNorm=0;
         break;
     case C5:
         rgb_state=C6;
-        digitalWrite(rLedPin, LOW);
-        digitalWrite(gLedPin, HIGH);
-        digitalWrite(bLedPin, LOW);
+//        digitalWrite(rLedPin, LOW);
+//        digitalWrite(gLedPin, HIGH);
+//        digitalWrite(bLedPin, LOW);
+        analogWrite(rLedPin,0);
+        analogWrite(gLedPin,255);
+        analogWrite(bLedPin,0);
+        rNorm=1;
+        gNorm=0;
+        bNorm=1;
         break;
     case C6:
         rgb_state=C7;
-        digitalWrite(rLedPin, LOW);
-        digitalWrite(gLedPin, LOW);
-        digitalWrite(bLedPin, HIGH);
+//        digitalWrite(rLedPin, LOW);
+//        digitalWrite(gLedPin, LOW);
+//        digitalWrite(bLedPin, HIGH);
+        analogWrite(rLedPin,0);
+        analogWrite(gLedPin,0);
+        analogWrite(bLedPin,255);
+        rNorm=1;
+        gNorm=1;
+        bNorm=0;
         break;
     case C7:
         rgb_state=C0;
-        digitalWrite(rLedPin, LOW);
-        digitalWrite(gLedPin, LOW);
-        digitalWrite(bLedPin, LOW);
+//        digitalWrite(rLedPin, LOW);
+//        digitalWrite(gLedPin, LOW);
+//        digitalWrite(bLedPin, LOW);
+        analogWrite(rLedPin,0);
+        analogWrite(gLedPin,0);
+        analogWrite(bLedPin,0);
+        rNorm=1;
+        gNorm=1;
+        bNorm=1;
         break;
   }
 
-  rVal=analogRead(rLedPin);
-  rVolt=(float)rVal*5.0/1023.0;
-  rNorm=rVolt/5.0;
-  gVal=analogRead(gLedPin);
-  gVolt=(float)gVal*5.0/1023.0;
-  gNorm=gVolt/5.0;
-  bVal=analogRead(bLedPin);
-  bVolt=(float)bVal*5.0/1023.0;
-  bNorm=bVolt/5.0;
+//  rVal=analogRead(rLedPin);
+//  rVolt=(float)rVal*5.0/1023.0;
+//  rNorm=rVolt/5.0;
+//  gVal=analogRead(gLedPin);
+//  gVolt=(float)gVal*5.0/1023.0;
+//  gNorm=gVolt/5.0;
+//  bVal=analogRead(bLedPin);
+//  bVolt=(float)bVal*5.0/1023.0;
+//  bNorm=bVolt/5.0;
 
   Serial.print("RGB");
   Serial.print(rgb_state);
@@ -229,6 +277,14 @@ void setup()
     Timer1.stop();        //stop the counter
     Timer1.restart();     //set the clock to zero
 
+
+    //default values RGB state C7
+    analogWrite(rLedPin,0);
+    analogWrite(gLedPin,0);
+    analogWrite(bLedPin,0);  
+    rNorm=1;
+    gNorm=0;
+    bNorm=1;
 
     Serial.print("State");
     Serial.print(state);
@@ -331,18 +387,24 @@ void loop()
         potValue=analogRead(potReadPin);
         potVolt=(float)potValue*5.0/1023.0;
         potNorm=potVolt/5.0;
+        potNormInv=1-potNorm;
 
-        analogWrite(rLedPin,(int)(255*rNorm*potNorm));
-        analogWrite(gLedPin,(int)(255*gNorm*potNorm));
-        analogWrite(bLedPin,(int)(255*bNorm*potNorm));        
+        int out1,out2,out3;
+        out1=255 - (int)(255*rNorm*potNormInv);
+        out2=255 - (int)(255*gNorm*potNormInv);
+        out3=255 - (int)(255*bNorm*potNormInv);
+        
+        analogWrite(rLedPin,out1);
+        analogWrite(gLedPin,out2);
+        analogWrite(bLedPin,out3);        
  
-        Serial.print("See\r");
-        Serial.print(potValue);
-        Serial.print("\r");
-        Serial.print(potVolt);
-        Serial.print("\r");
-        Serial.print(potNorm);
-        Serial.print("\r"); 
+//        Serial.print("See\r");
+//        Serial.print(out1);
+//        Serial.print("\r");
+//        Serial.print(out2);
+//        Serial.print("\r");
+//        Serial.print(out3);
+//        Serial.print("\r"); 
       }
       
       loop_run_flag=0;
