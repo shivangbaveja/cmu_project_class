@@ -141,9 +141,6 @@ void change_rgb_state()
   {
     case C0:
         rgb_state=C1;
-//        digitalWrite(rLedPin, HIGH);
-//        digitalWrite(gLedPin, HIGH);
-//        digitalWrite(bLedPin, HIGH);
         analogWrite(rLedPin,255);
         analogWrite(gLedPin,255);
         analogWrite(bLedPin,255);
@@ -153,9 +150,6 @@ void change_rgb_state()
         break;
     case C1:
         rgb_state=C2;
-//        digitalWrite(rLedPin, HIGH);
-//        digitalWrite(gLedPin, HIGH);
-//        digitalWrite(bLedPin, LOW);
         analogWrite(rLedPin,255);
         analogWrite(gLedPin,255);
         analogWrite(bLedPin,0);
@@ -165,9 +159,6 @@ void change_rgb_state()
         break;
     case C2:
         rgb_state=C3;
-//        digitalWrite(rLedPin, HIGH);
-//        digitalWrite(gLedPin, LOW);
-//        digitalWrite(bLedPin, HIGH);
         analogWrite(rLedPin,255);
         analogWrite(gLedPin,0);
         analogWrite(bLedPin,255);
@@ -177,9 +168,6 @@ void change_rgb_state()
         break;
     case C3:
         rgb_state=C4;
-//        digitalWrite(rLedPin, HIGH);
-//        digitalWrite(gLedPin, LOW);
-//        digitalWrite(bLedPin, LOW);
         analogWrite(rLedPin,255);
         analogWrite(gLedPin,0);
         analogWrite(bLedPin,0);
@@ -189,9 +177,6 @@ void change_rgb_state()
         break;
     case C4:
         rgb_state=C5;
-//        digitalWrite(rLedPin, LOW);
-//        digitalWrite(gLedPin, HIGH);
-//        digitalWrite(bLedPin, HIGH);
         analogWrite(rLedPin,0);
         analogWrite(gLedPin,255);
         analogWrite(bLedPin,255);
@@ -201,9 +186,6 @@ void change_rgb_state()
         break;
     case C5:
         rgb_state=C6;
-//        digitalWrite(rLedPin, LOW);
-//        digitalWrite(gLedPin, HIGH);
-//        digitalWrite(bLedPin, LOW);
         analogWrite(rLedPin,0);
         analogWrite(gLedPin,255);
         analogWrite(bLedPin,0);
@@ -213,9 +195,6 @@ void change_rgb_state()
         break;
     case C6:
         rgb_state=C7;
-//        digitalWrite(rLedPin, LOW);
-//        digitalWrite(gLedPin, LOW);
-//        digitalWrite(bLedPin, HIGH);
         analogWrite(rLedPin,0);
         analogWrite(gLedPin,0);
         analogWrite(bLedPin,255);
@@ -225,9 +204,6 @@ void change_rgb_state()
         break;
     case C7:
         rgb_state=C0;
-//        digitalWrite(rLedPin, LOW);
-//        digitalWrite(gLedPin, LOW);
-//        digitalWrite(bLedPin, LOW);
         analogWrite(rLedPin,0);
         analogWrite(gLedPin,0);
         analogWrite(bLedPin,0);
@@ -236,16 +212,6 @@ void change_rgb_state()
         bNorm=1;
         break;
   }
-
-//  rVal=analogRead(rLedPin);
-//  rVolt=(float)rVal*5.0/1023.0;
-//  rNorm=rVolt/5.0;
-//  gVal=analogRead(gLedPin);
-//  gVolt=(float)gVal*5.0/1023.0;
-//  gNorm=gVolt/5.0;
-//  bVal=analogRead(bLedPin);
-//  bVolt=(float)bVal*5.0/1023.0;
-//  bNorm=bVolt/5.0;
 
   Serial.print("RGB");
   Serial.print(rgb_state);
@@ -267,94 +233,6 @@ void button1_pressed()
     button1_rise_detected=1;
 //    Serial.print("#");
 }
-
-//void serialEvent() {
-////  test_flag=1;
-//  while (Serial.available()) 
-//  {
-//      rx_count++;
-//      data_buffer[index++]=(char)Serial.read();
-//      if(index==MAX_BUFF_LEN)
-//      {
-//        index=0;
-//      }
-//    }
-//}
-
-//char get_char()
-//{
-//  char output='N';
-//  if(rx_count>0)
-//  {
-//    rx_count--;
-//    output= data_buffer[read_index++];
-//    if(read_index==MAX_BUFF_LEN)
-//    {
-//      read_index=0;
-//    }
-//  }
-//  return output;
-//}
-//
-//void parse_data()
-//{
-//  char ch;
-//  if(rx_count>0)
-//  {
-//    ch=get_char();
-//    Serial.print(ch);
-//    if(ch=='r' || ch=='g' || ch=='b' || ch=='R' || ch=='G' || ch=='B' || (ch>=48 && ch<=57) || ch==32)
-//    {
-//      if(ch=='r' || ch=='g' || ch=='b' || ch=='R' || ch=='G' || ch=='B')
-//      {
-//        index=0;
-//        command_start=1;
-//        data[index++]=ch;
-//      }
-//      else if(command_start==1)
-//      {
-//        if(index>5)
-//        {
-//          index=0;
-//          command_start=0;
-//        }
-//        else if(ch==32)
-//        {
-//          if(index>2)
-//          {
-//            data[index++]=ch;
-//            command_start=0;
-//            data_ready=1;
-//          }
-//          else
-//          {
-//             command_start=0;
-//             index=0;
-//          }
-//        }
-//        else if(ch>=48 && ch<=57)
-//        {
-//          data[index++]=ch;
-//        }
-//        else
-//        {
-//          command_start=0;
-//          index=0;
-//        }
-//      }
-//      else
-//      {
-//        index=0;
-//        command_start=0;
-//      }
-//    }
-//    else
-//    {
-//      index=0;
-//      command_start=1;
-//    }
-//  }
-//}
 
 void setup()
 {
@@ -412,22 +290,6 @@ void loop()
       loop_last_time=time_now;
     }
 
-//Debugging purpose, testing loop rate
-//    if(loop_run_flag==1)
-//    {
-//      loop_run_flag=0;
-//      if(a==0)
-//      {
-//        a=1;
-//        digitalWrite(statusLedPin, HIGH);
-//      }
-//      else
-//      {
-//        a=0;
-//        digitalWrite(statusLedPin, LOW);
-//      }
-//    }
-
     val_button0 = digitalRead(button0_pin);   // read the input pin
     time_now=Timer1.read();
     if(val_button0==1)
@@ -483,26 +345,6 @@ void loop()
 
     delay(2);
 
-//    while(rx_count>0)
-//    {
-//       parse_data(); 
-//    }
-//    if(data_ready==1)
-//    {
-//      Serial.print("Q\r");
-//      data_ready=0;
-//    }
-    
-//    send data only when you receive data:
-//    while (Serial.available() > 0) {
-//      rx_count++;
-//      data_buffer[index++]=(char)Serial.read();
-//      if(index==MAX_BUFF_LEN)
-//      {
-//        index=0;
-//      }
-//    }
-
       while(Serial.available()) 
       {
              str= Serial.readString();// read the incoming data as string
@@ -557,17 +399,6 @@ void loop()
               }
          }  
 
-//    while(rx_count>0)
-//    {
-//      Serial.print(get_char());
-//    }
-
-//    if(test_flag==1)
-//    {
-//      test_flag=0;
-//      Serial.print('l');
-//    }
-
     if(loop_run_flag)
     {
       if(state==STATE1)
@@ -585,14 +416,6 @@ void loop()
         analogWrite(rLedPin,out1);
         analogWrite(gLedPin,out2);
         analogWrite(bLedPin,out3);        
-
-//        Serial.print("See\r");
-//        Serial.print(out1);
-//        Serial.print("\r");
-//        Serial.print(out2);
-//        Serial.print("\r");
-//        Serial.print(out3);
-//        Serial.print("\r"); 
       }
       
       loop_run_flag=0;
