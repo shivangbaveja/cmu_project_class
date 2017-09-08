@@ -24,7 +24,7 @@
 #include "TimerOne.h" 
 
 /******************************* Start of Macro definitions**************************************/
-#define BAUD 38400
+#define BAUD 9600
 #define PIN_BUTTON0 3
 #define PIN_BUTTON1 2
 #define POTENTIOMETER 0
@@ -94,6 +94,21 @@ int val_button0 = 0;     // variable to store the read value
 long loop_last_time=0;
 int loop_run_flag=0;
 
+// Serial data
+#define MAX_BUFF_LEN 20
+char data_buffer[MAX_BUFF_LEN];
+char data[4];
+int index=0;
+int read_index=0;
+int data_index=0;
+int rx_count=0;
+int data_ready=0;
+int command_start=0;
+
+String str,str2;
+int start_parse=0;
+
+int test_flag=0;
 /*******************************End of golobal Variable section *****************************/
 
 
@@ -242,7 +257,7 @@ void button0_pressed()
     //store the ti
     button0_press_start_time=Timer1.read();
     button0_rise_detected=1;
-    Serial.print("*");
+//    Serial.print("*");
 }
 
 void button1_pressed()
@@ -250,8 +265,96 @@ void button1_pressed()
     //store the ti
     button1_press_start_time=Timer1.read();
     button1_rise_detected=1;
-    Serial.print("#");
+//    Serial.print("#");
 }
+
+//void serialEvent() {
+////  test_flag=1;
+//  while (Serial.available()) 
+//  {
+//      rx_count++;
+//      data_buffer[index++]=(char)Serial.read();
+//      if(index==MAX_BUFF_LEN)
+//      {
+//        index=0;
+//      }
+//    }
+//}
+
+//char get_char()
+//{
+//  char output='N';
+//  if(rx_count>0)
+//  {
+//    rx_count--;
+//    output= data_buffer[read_index++];
+//    if(read_index==MAX_BUFF_LEN)
+//    {
+//      read_index=0;
+//    }
+//  }
+//  return output;
+//}
+//
+//void parse_data()
+//{
+//  char ch;
+//  if(rx_count>0)
+//  {
+//    ch=get_char();
+//    Serial.print(ch);
+//    if(ch=='r' || ch=='g' || ch=='b' || ch=='R' || ch=='G' || ch=='B' || (ch>=48 && ch<=57) || ch==32)
+//    {
+//      if(ch=='r' || ch=='g' || ch=='b' || ch=='R' || ch=='G' || ch=='B')
+//      {
+//        index=0;
+//        command_start=1;
+//        data[index++]=ch;
+//      }
+//      else if(command_start==1)
+//      {
+//        if(index>5)
+//        {
+//          index=0;
+//          command_start=0;
+//        }
+//        else if(ch==32)
+//        {
+//          if(index>2)
+//          {
+//            data[index++]=ch;
+//            command_start=0;
+//            data_ready=1;
+//          }
+//          else
+//          {
+//             command_start=0;
+//             index=0;
+//          }
+//        }
+//        else if(ch>=48 && ch<=57)
+//        {
+//          data[index++]=ch;
+//        }
+//        else
+//        {
+//          command_start=0;
+//          index=0;
+//        }
+//      }
+//      else
+//      {
+//        index=0;
+//        command_start=0;
+//      }
+//    }
+//    else
+//    {
+//      index=0;
+//      command_start=1;
+//    }
+//  }
+//}
 
 void setup()
 {
@@ -380,6 +483,91 @@ void loop()
 
     delay(2);
 
+//    while(rx_count>0)
+//    {
+//       parse_data(); 
+//    }
+//    if(data_ready==1)
+//    {
+//      Serial.print("Q\r");
+//      data_ready=0;
+//    }
+    
+//    send data only when you receive data:
+//    while (Serial.available() > 0) {
+//      rx_count++;
+//      data_buffer[index++]=(char)Serial.read();
+//      if(index==MAX_BUFF_LEN)
+//      {
+//        index=0;
+//      }
+//    }
+
+      while(Serial.available()) 
+      {
+             str= Serial.readString();// read the incoming data as string
+             start_parse=1;
+             char ch=str[0];
+             if(ch=='r' || ch=='g' || ch=='b' || ch=='R' || ch=='G' || ch=='B')
+             {
+                str2=str;
+                str2.replace(ch,'0');
+                int val=str2.toInt();
+                
+                int test_bad=0;
+                int i=1;
+                while(str2.charAt(i)!='\0')
+                {
+                    if(str2.charAt(i)<48 || str2.charAt(i)>57)
+                    {
+                      test_bad=1;
+                      break;
+                    }
+                    i++;
+                }
+
+                 if(state==STATE2 && val>=0 && val<=255 && str.length()<=4 && test_bad==0)
+                  {            
+                    int out=255-val;
+                    switch(ch)
+                    {
+                      case 'r':
+                      analogWrite(rLedPin,out);
+                      break;
+                      case 'R':
+                      analogWrite(rLedPin,out);
+                      break;
+                      case 'g':
+                      analogWrite(gLedPin,out);
+                      break;
+                      case 'G':
+                      analogWrite(gLedPin,out);
+                      break;
+                      case 'b':
+                      analogWrite(bLedPin,out);
+                      break;
+                      case 'B':
+                      analogWrite(bLedPin,out);
+                      break;
+                    }
+                    Serial.print(ch);
+                    Serial.print(val);
+                    Serial.print("\r");
+                  }
+              }
+         }  
+
+//    while(rx_count>0)
+//    {
+//      Serial.print(get_char());
+//    }
+
+//    if(test_flag==1)
+//    {
+//      test_flag=0;
+//      Serial.print('l');
+//    }
+
     if(loop_run_flag)
     {
       if(state==STATE1)
@@ -397,7 +585,7 @@ void loop()
         analogWrite(rLedPin,out1);
         analogWrite(gLedPin,out2);
         analogWrite(bLedPin,out3);        
- 
+
 //        Serial.print("See\r");
 //        Serial.print(out1);
 //        Serial.print("\r");
@@ -420,6 +608,7 @@ void loop()
       }
     }
 }
+
 
 /***************************************End of Function section****************************/
 
