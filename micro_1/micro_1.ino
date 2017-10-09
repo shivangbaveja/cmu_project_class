@@ -25,8 +25,8 @@
 
 /******************************* Start of Macro definitions**************************************/
 #define BAUD 9600
-#define PIN_BUTTON0 3
-#define PIN_BUTTON1 2
+#define PIN_BUTTON0 2
+#define PIN_BUTTON1 3
 #define POTENTIOMETER 0
 #define RED_LED_CHANNEL 9
 #define GREEN_LED_CHANNEL 10
@@ -109,6 +109,13 @@ String str,str2;
 int start_parse=0;
 
 int test_flag=0;
+
+
+/*
+ * Ultrasonic variables
+ */
+ const int ultraPin = 7;
+ long ultraPulse, ultraInches, ultraCM;
 /*******************************End of golobal Variable section *****************************/
 
 
@@ -236,6 +243,11 @@ void button1_pressed()
 
 void setup()
 {
+    /*
+     * Ultrasonic sensor related stuff
+     */
+     pinMode(ultraPin, INPUT);
+  
     //initialize serial port
     Serial.begin(BAUD); 
 
@@ -417,7 +429,23 @@ void loop()
         analogWrite(gLedPin,out2);
         analogWrite(bLedPin,out3);        
       }
+
+      /*
+       * Get and print ultrasonic data
+       */
+      ultraPulse = pulseIn(ultraPin, HIGH);
       
+      //147uS per inch
+      ultraInches = ultraPulse / 147;
+      
+      //change Inches to centimetres
+      ultraCM = ultraInches * 2.54;
+      Serial.print(ultraCM);
+      Serial.print("cm");
+      Serial.println();
+      /*********************************/
+      
+
       loop_run_flag=0;
       if(a==0)
       {
