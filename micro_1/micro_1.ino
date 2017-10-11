@@ -22,15 +22,25 @@
  */
 
 #include "TimerOne.h" 
+//#include "PinChangeInt.h"
 
 /******************************* Start of Macro definitions**************************************/
 #define BAUD 9600
-#define PIN_BUTTON0 2
-#define PIN_BUTTON1 3
-#define POTENTIOMETER 0
-#define RED_LED_CHANNEL 9
-#define GREEN_LED_CHANNEL 10
-#define BLUE_LED_CHANNEL 11
+#define PIN_BUTTON0 (2)
+#define ENCODER1    (3)
+#define POTENTIOMETER (0)
+#define ULTRASONIC_PIN  (8)
+
+//anticlockwise when looking at shaft from the front, when high given to F and low given to B
+#define M_CTRL_F  (7)       //Motor control forward, goes to L1, 
+#define M_CTRL_B (5)        //Motor control backward, goes to L2
+#define ENCODER2  (4)
+#define SPEED_CONTROL_PIN   (6)
+
+#define P_GAIN      (5.0)
+#define I_GAIN      (0.0)
+#define D_GAIN      (1.0)
+#define INT_MAX     (150.0)
 
 #define DEBOUNCE_DELAY  20000     //micro sec
 
@@ -44,42 +54,21 @@ typedef enum
   STATE2=2
 }STATE;
 
-typedef enum
-{
-  C0=0,
-  C1=1,
-  C2=2,
-  C3=3,
-  C4=4,
-  C5=5,
-  C6=6,
-  C7=7,  
-}RGB_STATE;
-
 /********************************* End of Type Declrations**************************************/
 
 /*******************************Start of Global variable section *********************/
 STATE state=STATE0;
-RGB_STATE rgb_state=C7;
-
 
 int statusLedPin = 13; // LED connected to digital pin 13
 int a=0;
 
 int potReadPin=POTENTIOMETER;
-int rLedPin=RED_LED_CHANNEL;
-int gLedPin=GREEN_LED_CHANNEL;
-int bLedPin=BLUE_LED_CHANNEL;
 
 int potValue=0;
 float potVolt=0.0;
 float potNorm=0.0;
 float potNormInv=0.0;
 
-int rVal=0,gVal=0,bVal=0;
-float rVolt=0.0,rNorm=0.0,gVolt=0.0,gNorm=0.0,bVolt=0.0,bNorm=0.0;
-
-int button1_pin = PIN_BUTTON1;
 long button1_press_start_time=0;
 int button1_press_time=0;
 int button1_rise_detected=0;
@@ -93,6 +82,8 @@ int val_button0 = 0;     // variable to store the read value
 
 long loop_last_time=0;
 int loop_run_flag=0;
+int hz1_loop=0;
+int hz5_loop=0;
 
 // Serial data
 #define MAX_BUFF_LEN 20
@@ -110,13 +101,28 @@ int start_parse=0;
 
 int test_flag=0;
 
+/*
+ * Encoder specific variables
+ */
+volatile long encoder_count=0;
 
 /*
  * Ultrasonic variables
  */
- const int ultraPin = 7;
+ const int ultraPin = ULTRASONIC_PIN;
  long ultraPulse, ultraInches, ultraCM;
 /*******************************End of golobal Variable section *****************************/
+
+/*
+ * PID control
+ */
+float error_pos=0;
+int target_pos=0;
+int current_pos=0;
+float integrator=0;
+long int pid_old_time=0;
+float control_out=0;
+ /******************************/
 
 
 /*******************************Start of function section  **************************/
@@ -142,103 +148,67 @@ void change_state()
   Serial.print("\r");
 }
 
-void change_rgb_state()
-{
-  switch(rgb_state)
-  {
-    case C0:
-        rgb_state=C1;
-        analogWrite(rLedPin,255);
-        analogWrite(gLedPin,255);
-        analogWrite(bLedPin,255);
-        rNorm=0;
-        gNorm=0;
-        bNorm=0;
-        break;
-    case C1:
-        rgb_state=C2;
-        analogWrite(rLedPin,255);
-        analogWrite(gLedPin,255);
-        analogWrite(bLedPin,0);
-        rNorm=0;
-        gNorm=0;
-        bNorm=1;
-        break;
-    case C2:
-        rgb_state=C3;
-        analogWrite(rLedPin,255);
-        analogWrite(gLedPin,0);
-        analogWrite(bLedPin,255);
-        rNorm=0;
-        gNorm=1;
-        bNorm=0;
-        break;
-    case C3:
-        rgb_state=C4;
-        analogWrite(rLedPin,255);
-        analogWrite(gLedPin,0);
-        analogWrite(bLedPin,0);
-        rNorm=0;
-        gNorm=1;
-        bNorm=1;
-        break;
-    case C4:
-        rgb_state=C5;
-        analogWrite(rLedPin,0);
-        analogWrite(gLedPin,255);
-        analogWrite(bLedPin,255);
-        rNorm=1;
-        gNorm=0;
-        bNorm=0;
-        break;
-    case C5:
-        rgb_state=C6;
-        analogWrite(rLedPin,0);
-        analogWrite(gLedPin,255);
-        analogWrite(bLedPin,0);
-        rNorm=1;
-        gNorm=0;
-        bNorm=1;
-        break;
-    case C6:
-        rgb_state=C7;
-        analogWrite(rLedPin,0);
-        analogWrite(gLedPin,0);
-        analogWrite(bLedPin,255);
-        rNorm=1;
-        gNorm=1;
-        bNorm=0;
-        break;
-    case C7:
-        rgb_state=C0;
-        analogWrite(rLedPin,0);
-        analogWrite(gLedPin,0);
-        analogWrite(bLedPin,0);
-        rNorm=1;
-        gNorm=1;
-        bNorm=1;
-        break;
-  }
-
-  Serial.print("RGB");
-  Serial.print(rgb_state);
-  Serial.print("\r");
-}
-
 void button0_pressed()
 {
-    //store the ti
     button0_press_start_time=Timer1.read();
     button0_rise_detected=1;
-//    Serial.print("*");
 }
 
-void button1_pressed()
+void encoder1_change()
 {
-    //store the ti
-    button1_press_start_time=Timer1.read();
-    button1_rise_detected=1;
-//    Serial.print("#");
+    bool encoder1_val=PIND & B00001000;
+    bool encoder2_val=PIND & B00010000;
+    if(encoder1_val==encoder2_val)
+    {
+      encoder_count--;
+    }
+    else
+    {
+      encoder_count++;
+    }
+}
+
+void run_motor()
+{
+  if(control_out>255)
+  {
+    control_out=255;
+  }
+  else if(control_out<-255)
+  {
+    control_out=-255;
+  }
+  
+  if(control_out<0)
+  {
+    //go reverse
+    digitalWrite(M_CTRL_B, HIGH);
+    digitalWrite(M_CTRL_F, LOW);
+    analogWrite(SPEED_CONTROL_PIN,abs(int(control_out)));
+    
+    Serial.print("\nError:");
+    Serial.print(error_pos);
+    Serial.print("\nBackward:");
+    Serial.print(control_out);
+    Serial.print("\nIntegrator:");
+    Serial.print(integrator);
+    Serial.println();
+  }
+  else
+  {
+    //go forward
+    digitalWrite(M_CTRL_F, HIGH);
+    digitalWrite(M_CTRL_B, LOW);
+    analogWrite(SPEED_CONTROL_PIN,abs(int(control_out)));
+    
+    Serial.print("\nError:");
+    Serial.print(error_pos);
+    Serial.print("\nforward:");
+    Serial.print(control_out);
+    Serial.print("\nIntegrator:");
+    Serial.print(integrator);
+    Serial.println();
+  }
 }
 
 void setup()
@@ -247,43 +217,34 @@ void setup()
      * Ultrasonic sensor related stuff
      */
      pinMode(ultraPin, INPUT);
-  
+
+     /*
+      * Motor initializations
+      */
+    pinMode(M_CTRL_B, OUTPUT);
+    pinMode(M_CTRL_F, OUTPUT);
+    pinMode(SPEED_CONTROL_PIN, OUTPUT);
+      
     //initialize serial port
     Serial.begin(BAUD); 
 
     //initialize input output pins
     pinMode(statusLedPin, OUTPUT);          // sets the digital pin 13 as output
-
-    //RGB LED
-    pinMode(rLedPin, OUTPUT);          // sets the digital pin 9 as output
-    pinMode(gLedPin, OUTPUT);          // sets the digital pin 10 as output
-    pinMode(bLedPin, OUTPUT);          // sets the digital pin 11 as output
     
-    pinMode(button0_pin, INPUT);      // sets the digital pin 3 as input
-    pinMode(button1_pin, INPUT);      // sets the digital pin 2 as input
+    pinMode(button0_pin, INPUT);      // sets the digital pin 2 as input
+    pinMode(ENCODER1, INPUT);      // sets the digital pin 3 as input
+    pinMode(ENCODER2, INPUT);      // sets the digital pin 2 as input
 
     attachInterrupt(digitalPinToInterrupt(button0_pin), button0_pressed, RISING);
-    attachInterrupt(digitalPinToInterrupt(button1_pin), button1_pressed, RISING);  
+    attachInterrupt(digitalPinToInterrupt(ENCODER1), encoder1_change, CHANGE);  
 
     //initialize timer
     Timer1.initialize();
     Timer1.stop();        //stop the counter
     Timer1.restart();     //set the clock to zero
 
-
-    //default values RGB state C7
-    analogWrite(rLedPin,0);
-    analogWrite(gLedPin,0);
-    analogWrite(bLedPin,0);  
-    rNorm=1;
-    gNorm=0;
-    bNorm=1;
-
     Serial.print("State");
     Serial.print(state);
-    Serial.print("\r");
-    Serial.print("RGB");
-    Serial.print(rgb_state);
     Serial.print("\r");
 }
 
@@ -291,12 +252,12 @@ void loop()
 {
     //setting loop flag at 5Hz
     long time_now=Timer1.read();
-    if((time_now-loop_last_time)>200000)
+    if((time_now-loop_last_time)>20000)
     {
       loop_run_flag=1;
       loop_last_time=time_now;
     }
-    else if((time_now<loop_last_time) && ((1000000+time_now-loop_last_time)>200000))
+    else if((time_now<loop_last_time) && ((1000000+time_now-loop_last_time)>20000))
     {
       loop_run_flag=1;
       loop_last_time=time_now;
@@ -327,108 +288,76 @@ void loop()
       }
     }
 
-    val_button1 = digitalRead(button1_pin);   // read the input pin
-    time_now=Timer1.read();
-    if(val_button1==1)
-    {
-      if(button1_rise_detected==1)
-      {
-        if(time_now>button1_press_start_time)
-        {
-           button1_press_time=time_now-button1_press_start_time;
-        }
-        else
-        {
-           button1_press_time=1000000+time_now-button1_press_start_time;
-        }
-        
-        if(button1_press_time>DEBOUNCE_DELAY)
-        {
-          if(state==STATE0)
-          {
-             change_rgb_state(); 
-          }
-          button1_press_time=0;
-          button1_press_start_time=time_now;
-          button1_rise_detected=0;
-        } 
-      }
-    }
-
     delay(2);
 
-      while(Serial.available()) 
-      {
-             str= Serial.readString();// read the incoming data as string
-             start_parse=1;
-             char ch=str[0];
-             if(ch=='r' || ch=='g' || ch=='b' || ch=='R' || ch=='G' || ch=='B')
-             {
-                str2=str;
-                str2.replace(ch,'0');
-                int val=str2.toInt();
-                
-                int test_bad=0;
-                int i=1;
-                while(str2.charAt(i)!='\0')
+    while(Serial.available()) 
+    {
+         str= Serial.readString();// read the incoming data as string
+         start_parse=1;
+         char ch=str[0];
+         if(ch=='d' || ch=='D')
+         {
+            str2=str;
+            str2.replace(ch,'0');
+            int val=str2.toInt();
+            
+            int test_bad=0;
+            int i=1;
+            while(str2.charAt(i)!='\0')
+            {
+                if(str2.charAt(i)<48 || str2.charAt(i)>57)
                 {
-                    if(str2.charAt(i)<48 || str2.charAt(i)>57)
-                    {
-                      test_bad=1;
-                      break;
-                    }
-                    i++;
+                  test_bad=1;
+                  break;
                 }
+                i++;
+            }
 
-                 if(state==STATE2 && val>=0 && val<=255 && str.length()<=4 && test_bad==0)
-                  {            
-                    int out=255-val;
-                    switch(ch)
-                    {
-                      case 'r':
-                      analogWrite(rLedPin,out);
-                      break;
-                      case 'R':
-                      analogWrite(rLedPin,out);
-                      break;
-                      case 'g':
-                      analogWrite(gLedPin,out);
-                      break;
-                      case 'G':
-                      analogWrite(gLedPin,out);
-                      break;
-                      case 'b':
-                      analogWrite(bLedPin,out);
-                      break;
-                      case 'B':
-                      analogWrite(bLedPin,out);
-                      break;
-                    }
-                    Serial.print(ch);
-                    Serial.print(val);
-                    Serial.print("\r");
-                  }
+             if(val>=0 && val<=360 && str.length()<=4 && test_bad==0)
+            {            
+              int out=val;
+              switch(ch)
+              {
+                case 'd':
+                Serial.print("\rReceived target:");
+                Serial.print(out);
+                target_pos=out;
+                break;
+                case 'D':
+                Serial.print("\rReceived target:");
+                Serial.print(out);
+                target_pos=out;
+                break;
               }
-         }  
+            }
+          }
+    }  
 
     if(loop_run_flag)
     {
-      if(state==STATE1)
+      //clear the flag
+      loop_run_flag=0;
+
+      //Blink the status LED
+      if(a==0)
       {
+        a=1;
+        digitalWrite(statusLedPin, HIGH);
+      }
+      else
+      {
+        a=0;
+        digitalWrite(statusLedPin, LOW);
+      }
+      
+      /*
+       * Potentiometer read
+       */
         potValue=analogRead(potReadPin);
         potVolt=(float)potValue*5.0/1023.0;
         potNorm=potVolt/5.0;
-        potNormInv=1-potNorm;
-
-        int out1,out2,out3;
-        out1=255 - (int)(255*rNorm*potNormInv);
-        out2=255 - (int)(255*gNorm*potNormInv);
-        out3=255 - (int)(255*bNorm*potNormInv);
-        
-        analogWrite(rLedPin,out1);
-        analogWrite(gLedPin,out2);
-        analogWrite(bLedPin,out3);        
-      }
+        potNormInv=1-potNorm; 
+      /*********************************/     
 
       /*
        * Get and print ultrasonic data
@@ -440,23 +369,74 @@ void loop()
       
       //change Inches to centimetres
       ultraCM = ultraInches * 2.54;
-      Serial.print(ultraCM);
-      Serial.print("cm");
-      Serial.println();
+//      Serial.print(ultraCM);
+//      Serial.print("cm");
+//      Serial.println();
       /*********************************/
-      
 
-      loop_run_flag=0;
-      if(a==0)
+      /*
+       * PID control
+       */
+      long int time_now=millis();
+      float dt=(time_now-pid_old_time)/1000.0;
+      pid_old_time=time_now;
+      if(dt<0.01)
       {
-        a=1;
-        digitalWrite(statusLedPin, HIGH);
+        dt=0.01;
+      }
+      else if(dt>1)
+      {
+        dt=1;
+      }
+
+      current_pos=encoder_count;
+      error_pos=target_pos-current_pos;
+
+      if(control_out<255 && error_pos>0)
+      {
+        integrator=integrator+error_pos*dt;
+      }
+      else if(control_out>-255 && error_pos<0)
+      {
+        integrator=integrator+error_pos*dt;
+      }
+      
+      if(integrator>INT_MAX)
+      {
+        integrator=INT_MAX;
+      }
+      else if(integrator<-INT_MAX)
+      {
+        integrator=-INT_MAX;
+      }
+
+      control_out=P_GAIN*error_pos + I_GAIN*integrator;
+      run_motor();
+
+
+
+
+      
+      //5Hz loop
+      hz5_loop++;
+      if(hz5_loop>10)
+      {
+        hz5_loop=0;
+      }
+      
+      /*
+       * Slow loop 1Hz
+       */
+      static int motor_dir=1;
+      if(hz1_loop>=50)
+      {
+        hz1_loop=0;
       }
       else
       {
-        a=0;
-        digitalWrite(statusLedPin, LOW);
+        hz1_loop++;
       }
+        /**************************/
     }
 }
 
