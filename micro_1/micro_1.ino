@@ -42,6 +42,10 @@
 #define D_GAIN      (1.0)
 #define INT_MAX     (150.0)
 
+#define SPEED_I_GAIN    (0.7)
+#define SPEED_P_GAIN    (2.0)
+#define SPEED_INT_MAX   (150)
+
 #define DEBOUNCE_DELAY  20000     //micro sec
 
 /******************************* End of MACRO definitions********************************/
@@ -69,7 +73,6 @@ int potReadPin=POTENTIOMETER;
 int potValue=0;
 float potVolt=0.0;
 float potNorm=0.0;
-float potNormInv=0.0;
 
 long button1_press_start_time=0;
 int button1_press_time=0;
@@ -107,6 +110,7 @@ int test_flag=0;
  * Encoder specific variables
  */
 volatile long encoder_count=0;
+long last_encoder_count=0;
 
 /*
  * Ultrasonic variables
@@ -124,6 +128,16 @@ int current_pos=0;
 float integrator=0;
 long int pid_old_time=0;
 float control_out=0;
+
+float speed_target=0;
+float speed_actual=0;
+float speed_control_out=0;
+float speed_integrator=0;
+float speed_error=0;
+float speed_I=SPEED_I_GAIN;
+float speed_P=SPEED_P_GAIN;
+int speed_dir=1;
+
 
 float p_gain=P_GAIN;
 float i_gain=I_GAIN;
@@ -147,6 +161,12 @@ void change_state()
         break;
     case STATE2:
         state=STATE0;
+        break;
+    case STATE3:
+        state=STATE4;
+        break;
+    case STATE4:
+        state=STATE1;
         break;
   }
 
@@ -173,6 +193,70 @@ void encoder1_change()
     {
       encoder_count++;
     }
+}
+
+void stop_motor()
+{
+  analogWrite(SPEED_CONTROL_PIN,0);
+}
+
+void motor_forward_pulse(int pulse)
+{
+  if(pulse<0)
+  {
+    pulse = 0;
+  }
+  else if(pulse>255)
+  {
+    pulse = 255;
+  }
+  analogWrite(SPEED_CONTROL_PIN,pulse);
+  digitalWrite(M_CTRL_F, HIGH);
+  digitalWrite(M_CTRL_B, LOW);
+}
+
+void motor_backward_pulse(int pulse)
+{
+  if(pulse<0)
+  {
+    pulse = 0;
+  }
+  else if(pulse>255)
+  {
+    pulse = 255;
+  }
+  analogWrite(SPEED_CONTROL_PIN,pulse);
+  digitalWrite(M_CTRL_F, LOW);
+  digitalWrite(M_CTRL_B, HIGH);
+}
+
+void run_motor_speed()
+{
+   if(speed_control_out>255)
+   {
+    speed_control_out=255;
+   }
+   else if(speed_control_out<-255)
+   {
+    speed_control_out=-255;
+   }
+  
+  //go forward
+  if(speed_target>0)
+  {
+    float control_out=(255 + speed_control_out)/2;
+    digitalWrite(M_CTRL_F, HIGH);
+    digitalWrite(M_CTRL_B, LOW);
+    analogWrite(SPEED_CONTROL_PIN,abs(int(control_out))); 
+  }
+  //go backward
+  else
+  {
+    float control_out=(255 - speed_control_out)/2;
+    digitalWrite(M_CTRL_F, LOW);
+    digitalWrite(M_CTRL_B, HIGH);
+    analogWrite(SPEED_CONTROL_PIN,abs(int(control_out))); 
+  }
 }
 
 void run_motor()
@@ -295,14 +379,14 @@ void loop()
       }
     }
 
-    delay(2);
+//    delay(5);
 
     while(Serial.available()) 
     {
          str= Serial.readString();// read the incoming data as string
          start_parse=1;
          char ch=str[0];
-         if(ch=='d' || ch=='D' || ch=='p' || ch=='i')
+         if(ch=='d' || ch=='D' || ch=='p' || ch=='i' || ch=='s')
          {
             str2=str;
             str2.replace(ch,'0');
@@ -350,6 +434,11 @@ void loop()
                 Serial.print("\nDgain:");
                 Serial.print(out);
                 break;
+                case 's':
+                speed_target=(float)out;
+                Serial.print("\nST:");
+                Serial.print(speed_target);
+                break;
               }
             }
           }
@@ -370,16 +459,7 @@ void loop()
       {
         a=0;
         digitalWrite(statusLedPin, LOW);
-      }
-      
-      /*
-       * Potentiometer read
-       */
-        potValue=analogRead(potReadPin);
-        potVolt=(float)potValue*5.0/1023.0;
-        potNorm=potVolt/5.0;
-        potNormInv=1-potNorm; 
-      /*********************************/     
+      }    
 
       /*
        * Get and print ultrasonic data
@@ -396,9 +476,6 @@ void loop()
 //      Serial.println();
       /*********************************/
 
-      /*
-       * PID control
-       */
       long int time_now=millis();
       float dt=(time_now-pid_old_time)/1000.0;
       pid_old_time=time_now;
@@ -411,31 +488,128 @@ void loop()
         dt=1;
       }
 
-      current_pos=encoder_count;
-      error_pos=target_pos-current_pos;
+      switch(state)
+      {
+        //Motors off
+        case STATE0:
+            
+            //SHUT MOTORS
+            stop_motor();
 
-      if(control_out<255 && error_pos>0)
-      {
-        integrator=integrator+error_pos*dt;
-      }
-      else if(control_out>-255 && error_pos<0)
-      {
-        integrator=integrator+error_pos*dt;
-      }
+            //TODO: Add code for stopping servo and stepper motor
+
+            //clear some variables
+            encoder_count=0;
+            target_pos=0;
+            integrator=0;
+            last_encoder_count=0;
+            speed_integrator=0;
+            speed_target=0;
+            break;
+
+        //DC motor pos control + ultrasonic sensor
+        case STATE1:
+            /*
+             * PID control
+             */
+            current_pos=encoder_count;
+            error_pos=target_pos-current_pos;
       
-      if(integrator>INT_MAX)
-      {
-        integrator=INT_MAX;
+            if(control_out<255 && error_pos>0)
+            {
+              integrator=integrator+error_pos*dt;
+            }
+            else if(control_out>-255 && error_pos<0)
+            {
+              integrator=integrator+error_pos*dt;
+            }
+            
+            if(integrator>INT_MAX)
+            {
+              integrator=INT_MAX;
+            }
+            else if(integrator<-INT_MAX)
+            {
+              integrator=-INT_MAX;
+            }
+      
+            control_out=p_gain*error_pos + i_gain*integrator;
+            run_motor();
+
+            speed_integrator=0;
+            speed_target=0;
+            break;
+
+        //DC motor speed control + potentiometer
+        case STATE2:
+            /*
+             * Potentiometer read
+             */
+              potValue=analogRead(potReadPin);
+              potVolt=(float)potValue*5.0/1023.0;
+              potNorm=potVolt/5.0;
+
+//              Serial.print("\rPot:");
+//              Serial.println(potNorm);
+              speed_target=100.0 + 200.0*potNorm;
+            /*********************************/
+
+            //degree per sec
+            speed_actual=(encoder_count-last_encoder_count)/dt;
+            last_encoder_count=encoder_count;
+
+            Serial.print("\rSpeed_actual:");
+            Serial.println(speed_actual);
+            Serial.print("Speed_target:");
+            Serial.println(speed_target);
+
+            if(speed_target==0)
+            {
+              //SHUT MOTORS
+               stop_motor();
+               speed_integrator=0;
+               speed_control_out=0;
+            }
+            else
+            {
+              speed_error = speed_target-speed_actual;
+              
+              if(speed_control_out<255 && speed_error>0)
+              {
+                speed_integrator = speed_integrator + speed_error*dt;
+              }
+              else if(speed_control_out>-255 && speed_error<0)
+              {
+                speed_integrator = speed_integrator + speed_error*dt;
+              }
+              
+              if(speed_integrator>SPEED_INT_MAX)
+              {
+                speed_integrator=SPEED_INT_MAX;
+              }
+              else if(speed_integrator<-SPEED_INT_MAX)
+              {
+                speed_integrator=-SPEED_INT_MAX;
+              }
+              
+              speed_control_out = speed_integrator*speed_I + speed_error*speed_P;
+              run_motor_speed(); 
+            }
+
+            target_pos=0;
+            integrator=0;
+            break;
+
+        //Servo motor + IR distance sensor
+        case STATE3:
+           
+            break;
+
+        //Stepper motor + force sensor
+        case STATE4:
+            
+            break;
       }
-      else if(integrator<-INT_MAX)
-      {
-        integrator=-INT_MAX;
-      }
-
-      control_out=p_gain*error_pos + i_gain*integrator;
-      run_motor();
-
-
       
       
 //      //5Hz loop
