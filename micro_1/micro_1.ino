@@ -51,7 +51,9 @@ typedef enum
 {
   STATE0=0,
   STATE1=1,
-  STATE2=2
+  STATE2=2,
+  STATE3=3,
+  STATE4=4
 }STATE;
 
 /********************************* End of Type Declrations**************************************/
@@ -122,6 +124,11 @@ int current_pos=0;
 float integrator=0;
 long int pid_old_time=0;
 float control_out=0;
+
+float p_gain=P_GAIN;
+float i_gain=I_GAIN;
+float d_gain=D_GAIN;
+float int_max=INT_MAX;
  /******************************/
 
 
@@ -295,7 +302,7 @@ void loop()
          str= Serial.readString();// read the incoming data as string
          start_parse=1;
          char ch=str[0];
-         if(ch=='d' || ch=='D')
+         if(ch=='d' || ch=='D' || ch=='p' || ch=='i')
          {
             str2=str;
             str2.replace(ch,'0');
@@ -319,14 +326,29 @@ void loop()
               switch(ch)
               {
                 case 'd':
-                Serial.print("\rReceived target:");
+                Serial.print("\nReceived target:");
                 Serial.print(out);
                 target_pos=out;
                 break;
                 case 'D':
-                Serial.print("\rReceived target:");
-                Serial.print(out);
+                Serial.print("\nReceived target:");
+                Serial.println(out);
                 target_pos=out;
+                break;
+                case 'p':                
+                p_gain=(float)out;
+                Serial.print("\nPgain:");
+                Serial.print(p_gain);
+                break;
+                case 'i':
+                i_gain=(float)out;
+                Serial.print("\nIgain:");
+                Serial.println(i_gain);
+                break;
+                case 'g':
+                d_gain=(float)out;
+                Serial.print("\nDgain:");
+                Serial.print(out);
                 break;
               }
             }
@@ -410,32 +432,31 @@ void loop()
         integrator=-INT_MAX;
       }
 
-      control_out=P_GAIN*error_pos + I_GAIN*integrator;
+      control_out=p_gain*error_pos + i_gain*integrator;
       run_motor();
 
 
-
-
       
-      //5Hz loop
-      hz5_loop++;
-      if(hz5_loop>10)
-      {
-        hz5_loop=0;
-      }
       
-      /*
-       * Slow loop 1Hz
-       */
-      static int motor_dir=1;
-      if(hz1_loop>=50)
-      {
-        hz1_loop=0;
-      }
-      else
-      {
-        hz1_loop++;
-      }
+//      //5Hz loop
+//      hz5_loop++;
+//      if(hz5_loop>10)
+//      {
+//        hz5_loop=0;
+//      }
+//      
+//      /*
+//       * Slow loop 1Hz
+//       */
+//      static int motor_dir=1;
+//      if(hz1_loop>=50)
+//      {
+//        hz1_loop=0;
+//      }
+//      else
+//      {
+//        hz1_loop++;
+//      }
         /**************************/
     }
 }
