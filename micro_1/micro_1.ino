@@ -23,6 +23,9 @@
 
 #include "TimerOne.h" 
 //#include "PinChangeInt.h"
+#include <Servo.h>
+#include <medianFilter.h>
+
 
 /******************************* Start of Macro definitions**************************************/
 #define BAUD 9600
@@ -63,6 +66,20 @@ typedef enum
 /********************************* End of Type Declrations**************************************/
 
 /*******************************Start of Global variable section *********************/
+
+/*
+ * Hari's servo IR integration
+ */
+const int ir=A1;
+const int servo=9;
+float IRinput[25];
+float IRdistance;
+float IRvolt,IRvolt1;
+float tmppos;
+int pos;
+Servo myservo; 
+ /**************************/
+
 STATE state=STATE0;
 
 int statusLedPin = 13; // LED connected to digital pin 13
@@ -116,7 +133,10 @@ long last_encoder_count=0;
  * Ultrasonic variables
  */
  const int ultraPin = ULTRASONIC_PIN;
- long ultraPulse, ultraInches, ultraCM;
+ long ultraPulse, ultraInches;
+long ultraCM;
+medianFilter Filter;
+int filtered_ultra=0;
 /*******************************End of golobal Variable section *****************************/
 
 /*
@@ -160,7 +180,7 @@ void change_state()
         state=STATE2;
         break;
     case STATE2:
-        state=STATE0;
+        state=STATE3;
         break;
     case STATE3:
         state=STATE4;
@@ -277,13 +297,13 @@ void run_motor()
     digitalWrite(M_CTRL_F, LOW);
     analogWrite(SPEED_CONTROL_PIN,abs(int(control_out)));
     
-    Serial.print("\nError:");
-    Serial.print(error_pos);
-    Serial.print("\nBackward:");
-    Serial.print(control_out);
-    Serial.print("\nIntegrator:");
-    Serial.print(integrator);
-    Serial.println();
+//    Serial.print("\nError:");
+//    Serial.print(error_pos);
+//    Serial.print("\nBackward:");
+//    Serial.print(control_out);
+//    Serial.print("\nIntegrator:");
+//    Serial.print(integrator);
+//    Serial.println();
   }
   else
   {
@@ -292,18 +312,53 @@ void run_motor()
     digitalWrite(M_CTRL_B, LOW);
     analogWrite(SPEED_CONTROL_PIN,abs(int(control_out)));
     
-    Serial.print("\nError:");
-    Serial.print(error_pos);
-    Serial.print("\nforward:");
-    Serial.print(control_out);
-    Serial.print("\nIntegrator:");
-    Serial.print(integrator);
-    Serial.println();
+//    Serial.print("\nError:");
+//    Serial.print(error_pos);
+//    Serial.print("\nforward:");
+//    Serial.print(control_out);
+//    Serial.print("\nIntegrator:");
+//    Serial.print(integrator);
+//    Serial.println();
   }
 }
 
+/*
+ * Hari's code
+ */
+void sort(float a[]) 
+{
+    for(int i=0; i<25; i++) 
+    {
+        bool flag = true;
+        for(int j=0; j<(25-(i+1)); j++) 
+        {
+            if(a[j] > a[j+1])
+            {
+                int t = a[j];
+                a[j] = a[j+1];
+                a[j+1] = t;
+                flag = false;
+            }
+        }
+        if (flag) 
+        break;
+    }
+    //Serial.println(1);
+}
+/*********************/
+
 void setup()
 {
+    Filter.begin();
+    /*
+     * Hari's code
+     */
+     // put your setup code here, to run once:
+      myservo.attach(9);
+      myservo.write(0);
+      pinMode(ir, INPUT);
+      /****************************/
+  
     /*
      * Ultrasonic sensor related stuff
      */
@@ -461,6 +516,7 @@ void loop()
         digitalWrite(statusLedPin, LOW);
       }    
 
+      /**********************************/
       /*
        * Get and print ultrasonic data
        */
@@ -468,12 +524,23 @@ void loop()
       
       //147uS per inch
       ultraInches = ultraPulse / 147;
-      
-      //change Inches to centimetres
+      //change Inches to centimetres and add a low pass filter
       ultraCM = ultraInches * 2.54;
+
+      if(ultraCM>20)
+      {
+        filtered_ultra= Filter.run(ultraCM);
+      }
+      
 //      Serial.print(ultraCM);
-//      Serial.print("cm");
+//      Serial.print("ucm");
 //      Serial.println();
+//      Serial.print(filtered_ultra);
+//      Serial.print("fcm");
+//      Serial.println();
+      /**********************************/
+
+     
       /*********************************/
 
       long int time_now=millis();
@@ -512,6 +579,8 @@ void loop()
             /*
              * PID control
              */
+
+            target_pos=map(filtered_ultra,20,200,0,360);
             current_pos=encoder_count;
             error_pos=target_pos-current_pos;
       
@@ -558,10 +627,10 @@ void loop()
             speed_actual=(encoder_count-last_encoder_count)/dt;
             last_encoder_count=encoder_count;
 
-            Serial.print("\rSpeed_actual:");
-            Serial.println(speed_actual);
-            Serial.print("Speed_target:");
-            Serial.println(speed_target);
+//            Serial.print("\rSpeed_actual:");
+//            Serial.println(speed_actual);
+//            Serial.print("Speed_target:");
+//            Serial.println(speed_target);
 
             if(speed_target==0)
             {
@@ -602,6 +671,55 @@ void loop()
 
         //Servo motor + IR distance sensor
         case STATE3:
+
+          // put your main code here, to run repeatedly:
+  
+          for (int i=0; i<25; i++)
+          {
+              // Read analog value
+              IRinput[i] = analogRead(ir);
+          }   
+          sort(IRinput);
+          
+          IRvolt = map((IRinput[13]+IRinput[12])/2.0,0,1023,0,5000);
+          IRvolt1 = IRvolt/1000.0;
+          
+          if(IRvolt1 >=0.85 && IRvolt1<=2.5)
+          {
+            IRdistance = 23.4 * IRvolt1 * IRvolt1 -115.7*IRvolt1 + 156.2; // from transfer function
+            tmppos = map(IRdistance,40.0,70.0,0.0,18.0)*10;
+            //pos = (int) tmppos;
+            Serial.print(IRdistance);
+            Serial.println(tmppos);
+            myservo.write(tmppos);
+            if (tmppos==172.0)                                   
+            myservo.write(180.0);
+            //range is 0.85v to 2.5v
+          //distance range is 13.24cm to 74.75cm
+          //working range is 40 to 71cm
+                         
+          //delay for servo in site is 15ms
+            }
+            else
+            {
+              IRdistance=-100;
+            }
+
+
+
+
+            //SHUT MOTORS
+            stop_motor();
+
+            //TODO: Add code for stopping servo and stepper motor
+
+            //clear some variables
+            encoder_count=0;
+            target_pos=0;
+            integrator=0;
+            last_encoder_count=0;
+            speed_integrator=0;
+            speed_target=0;
            
             break;
 
