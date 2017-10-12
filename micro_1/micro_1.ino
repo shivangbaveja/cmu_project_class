@@ -99,6 +99,8 @@ float desired_angle = 0.0;
 float desired_step = 0.0;
 int step_size = 0;
 
+float current_angle=0;
+
 const int stepsPerRevolution = 800;  // change this to fit the number of steps per revolution
 // for your motor
 
@@ -926,14 +928,30 @@ void loop()
 
             if(control_input==0)
             {
-              desired_angle = fsrForce*3;
+               desired_angle = fsrForce*3;
+               step_size = int (stepsPerRevolution * desired_angle / 360.0);  
+//             Serial.println(desired_angle);
+//             Serial.println(step_size);
+               myStepper.step(step_size);               
+            }
+            else
+            {
+              step_size = int (stepsPerRevolution * desired_angle / 360.0);  
+              myStepper.step(step_size);
+              current_angle+=(int)desired_angle;
+              desired_angle=0;
             }
             
-            step_size = int (stepsPerRevolution * desired_angle / 360.0);  
+            current_angle+=desired_angle;
+            if(current_angle>360)
+            {
+              current_angle=(int)(current_angle)%360;
+            }
+            
+//            Serial.print("Desired_angle:");
 //            Serial.println(desired_angle);
-//            Serial.println(step_size);
-            myStepper.step(step_size);
-
+//            Serial.print("Current Angle:");
+//            Serial.println(current_angle);
         
             encoder_count=0;
             target_pos=0;
