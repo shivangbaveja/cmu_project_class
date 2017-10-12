@@ -470,7 +470,7 @@ void  send_telemetry()
   String string7 =  "#";  
 
   String string=string1 + string2 + string3 + string4 + string5 + string6 + string7;
-//  Serial.println(string);
+  Serial.println(string);
 }
 
 void setup()
@@ -998,13 +998,13 @@ void loop()
     {
       loop_tele=0;
 
-      Serial.print("\nError:");
-      Serial.print(error_pos);
-      Serial.print("\nTargetpos:");
-      Serial.print(target_pos);
-      Serial.print("\ncurrentpos:");
-      Serial.print(current_pos);
-      Serial.println();
+//      Serial.print("\nError:");
+//      Serial.print(error_pos);
+//      Serial.print("\nTargetpos:");
+//      Serial.print(target_pos);
+//      Serial.print("\ncurrentpos:");
+//      Serial.print(current_pos);
+//      Serial.println();
 
       send_telemetry();
     }
