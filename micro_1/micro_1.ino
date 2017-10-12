@@ -35,6 +35,7 @@
 #define ENCODER1    (3)
 #define POTENTIOMETER (0)
 #define ULTRASONIC_PIN  (8)
+#define SERVO           (9)
 
 //anticlockwise when looking at shaft from the front, when high given to F and low given to B
 #define M_CTRL_F  (5)       //Motor control forward, goes to L1, 
@@ -73,7 +74,6 @@ typedef enum
  * Hari's servo IR integration
  */
 const int ir=A1;
-const int servo=10;
 //float IRinput[25];
 float IRdistance;
 float IRvolt,IRvolt1;
@@ -87,7 +87,7 @@ float filtered_IR=0;
 /*
  * Nick's code
  */
- int fsrPin = 2;     // the FSR and 10K pulldown are connected to a0
+ int fsrPin = A2;     // the FSR and 10K pulldown are connected to a0
 int fsrReading;     // the analog reading from the FSR resistor divider
 int fsrVoltage;     // the analog reading converted to voltage
 unsigned long fsrResistance;  // The voltage converted to resistance, can be very big so make "long"
@@ -466,7 +466,7 @@ void  send_telemetry()
   String string7 =  "#";  
 
   String string=string1 + string2 + string3 + string4 + string5 + string6 + string7;
-//  Serial.println(string);
+  Serial.println(string);
 }
 
 void setup()
@@ -485,8 +485,8 @@ void setup()
      */
      // put your setup code here, to run once:
      // put your setup code here, to run once:
-      myservo.attach(servo);
-      myservo.write(0);
+      myservo.attach(SERVO);
+      //myservo.write(0);
       pinMode(ir, INPUT);
       /****************************/
   
@@ -556,7 +556,7 @@ void loop()
          str= Serial.readString();// read the incoming data as string
          start_parse=1;
          char ch=str[0];
-         if(ch=='d' || ch=='D' || ch=='p' || ch=='i' || ch=='s' || ch)
+         if(ch=='d' || ch=='D' || ch=='p' || ch=='i' || ch=='s' || ch=='x' || ch=='X' || ch=='S')
          {
             str2=str;
             str2.replace(ch,'0');
@@ -579,25 +579,6 @@ void loop()
               int out=val;
               switch(ch)
               {
-                case 'd':
-                Serial.print("\nReceived target:");
-                Serial.print(out);
-
-                if(state==STATE1)
-                {
-                  target_pos=out;
-                  control_input=1;
-                }
-                else if(state==STATE2)
-                {
-                  
-                }
-                else if(state==STATE3)
-                {
-                  servo_target=out;
-                  control_input=1;
-                }
-                break;
                 case 'D':
                 Serial.print("\nReceived target:");
                 Serial.println(out);
@@ -636,7 +617,7 @@ void loop()
                 Serial.print("\nDgain:");
                 Serial.print(out);
                 break;
-                case 's':
+                case 'S':
                 
                 Serial.print("\nST:");
                 Serial.print(speed_target);
@@ -804,7 +785,7 @@ void loop()
 //            Serial.println(potNorm);
               if(control_input==0)
               {
-                speed_target=100.0 + 200.0*potNorm;
+                speed_target=100.0 + 300.0*potNorm;
               }
             /*********************************/
 
@@ -875,11 +856,10 @@ void loop()
           {
             if(IRvolt1 >=0.85 && IRvolt1<=2.5)
             {
-              servo_target=tmppos;
-              //pos = (int) tmppos;
-                Serial.print(IRdistance);
-                Serial.println(servo_target);
-//                myservo.write(servo_target);
+                servo_target=tmppos;
+//                Serial.print(IRdistance);
+//                Serial.println(servo_target);
+                myservo.write(servo_target);
               //range is 0.85v to 2.5v
               //distance range is 13.24cm to 74.75cm
               //working range is 40 to 71cm
@@ -893,8 +873,8 @@ void loop()
           }
           else
           {
-            Serial.print("\nhere");
-//            myservo.write(100);
+//            Serial.print("\nhere");
+            myservo.write(servo_target);
           }
           
             //SHUT MOTORS
@@ -950,9 +930,10 @@ void loop()
             }
             
             step_size = int (stepsPerRevolution * desired_angle / 360.0);  
-            Serial.println(desired_angle);
-            Serial.println(step_size);
+//            Serial.println(desired_angle);
+//            Serial.println(step_size);
             myStepper.step(step_size);
+
         
             encoder_count=0;
             target_pos=0;
