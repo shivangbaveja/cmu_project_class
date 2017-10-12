@@ -98,6 +98,7 @@ bool stepper_at_pos = false;
 float desired_angle = 0.0;
 float desired_step = 0.0;
 int step_size = 0;
+int stepper_init=0;
 
 float current_angle=0;
 
@@ -602,6 +603,12 @@ void loop()
                 {
                   desired_angle=out;
                   control_input=1;
+
+                  if(desired_angle==0)
+                  {
+                    stepper_init=1;
+                  }
+                  
                 }
                 break;
                 case 'p':                
@@ -936,7 +943,14 @@ void loop()
 
                current_angle+=desired_angle;
             }
-            else if(desired_angle>=0)
+            else if(stepper_init==1)
+            {
+              stepper_init=0;
+              step_size = int (stepsPerRevolution * (-current_angle) / 360.0);  
+              myStepper.step(step_size);
+              current_angle=0;
+            }
+            else if(desired_angle>0)     //check = sign
             {
               step_size = int (stepsPerRevolution * (desired_angle-current_angle) / 360.0);  
               myStepper.step(step_size);
