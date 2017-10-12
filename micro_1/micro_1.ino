@@ -21,6 +21,12 @@
 //#include "PinChangeInt.h"
 #include <Servo.h>
 #include <medianFilter.h>
+#include <Stepper.h>
+
+
+//Nick's code
+#define DIR 11
+#define STEP 10
 
 
 /******************************* Start of Macro definitions**************************************/
@@ -31,12 +37,12 @@
 #define ULTRASONIC_PIN  (8)
 
 //anticlockwise when looking at shaft from the front, when high given to F and low given to B
-#define M_CTRL_F  (7)       //Motor control forward, goes to L1, 
-#define M_CTRL_B (5)        //Motor control backward, goes to L2
+#define M_CTRL_F  (5)       //Motor control forward, goes to L1, 
+#define M_CTRL_B (7)        //Motor control backward, goes to L2
 #define ENCODER2  (4)
 #define SPEED_CONTROL_PIN   (6)
 
-#define P_GAIN      (5.0)
+#define P_GAIN      (2.0)
 #define I_GAIN      (0.0)
 #define D_GAIN      (0.0)
 #define INT_MAX     (150.0)
@@ -77,6 +83,28 @@ Servo myservo;
 int servo_target=0;
 float filtered_IR=0;
  /**************************/
+
+/*
+ * Nick's code
+ */
+ int fsrPin = 2;     // the FSR and 10K pulldown are connected to a0
+int fsrReading;     // the analog reading from the FSR resistor divider
+int fsrVoltage;     // the analog reading converted to voltage
+unsigned long fsrResistance;  // The voltage converted to resistance, can be very big so make "long"
+unsigned long fsrConductance; 
+long fsrForce;       // Finally, the resistance converted to force
+
+bool stepper_at_pos = false;
+float desired_angle = 0.0;
+float desired_step = 0.0;
+int step_size = 0;
+
+const int stepsPerRevolution = 800;  // change this to fit the number of steps per revolution
+// for your motor
+
+// initialize the stepper library on pins 8 through 11:
+Stepper myStepper(stepsPerRevolution, DIR, STEP);
+ /*************************/
 
 STATE state=STATE0;
 
@@ -250,6 +278,38 @@ void motor_backward_pulse(int pulse)
   digitalWrite(M_CTRL_B, HIGH);
 }
 
+int i=0;
+int dir=1;
+
+void run_motor_sweep()
+{
+  
+  if(i>10)
+  {
+    i=0;
+    if(dir==1)
+    {
+      dir=-1;
+      target_pos=0;
+      motor_forward_pulse(250);
+      Serial.print(i);
+      Serial.println("Forward");
+    }
+    else
+    {
+      dir=1;
+      target_pos=100;
+      Serial.print(i);
+      motor_backward_pulse(250);
+      Serial.println("Backward");
+    }
+  }
+  else
+  {
+    i++;
+  }
+}
+
 void run_motor_speed()
 {
    if(speed_control_out>255)
@@ -299,10 +359,10 @@ void run_motor()
     
 //    Serial.print("\nError:");
 //    Serial.print(error_pos);
-//    Serial.print("\nBackward:");
-//    Serial.print(control_out);
-//    Serial.print("\nIntegrator:");
-//    Serial.print(integrator);
+//    Serial.print("\nTargetpos:");
+//    Serial.print(target_pos);
+//    Serial.print("\ncurrentpos:");
+//    Serial.print(current_pos);
 //    Serial.println();
   }
   else
@@ -314,10 +374,10 @@ void run_motor()
     
 //    Serial.print("\nError:");
 //    Serial.print(error_pos);
-//    Serial.print("\nforward:");
-//    Serial.print(control_out);
-//    Serial.print("\nIntegrator:");
-//    Serial.print(integrator);
+//    Serial.print("\nTargetpos:");
+//    Serial.print(target_pos);
+//    Serial.print("\ncurrentpos:");
+//    Serial.print(current_pos);
 //    Serial.println();
   }
 }
@@ -364,7 +424,7 @@ void  send_telemetry()
         break;
     case STATE2:
         M=speed_actual;
-        D=potVolt;
+        D=(int)(100.0*potVolt);
         S=2;
         break;
     case STATE3:
@@ -373,15 +433,11 @@ void  send_telemetry()
         S=3;
         break;
     case STATE4:
-        M=current_pos;
-        D=filtered_ultra;
+        M=desired_angle;
+        D=fsrForce;
         S=4;
         break;
   }
-
-  D=890;
-  M=78;
-  
 
   if(M>=500)
   {
@@ -417,11 +473,18 @@ void setup()
 {
     Filter.begin();
     Filter_IR.begin();
+
+    /*
+     * Nick's code
+     */
+    myStepper.setSpeed(60);
+    /**********************/
+    
     /*
      * Hari's code
      */
      // put your setup code here, to run once:
-      // put your setup code here, to run once:
+     // put your setup code here, to run once:
       myservo.attach(servo);
       myservo.write(0);
       pinMode(ir, INPUT);
@@ -467,7 +530,7 @@ void loop()
       loop_last_time=time_now;
     }
 
-    bool val_button0=PIND & B00000100;   // read the input pin
+    bool val_button0=digitalRead(button0_pin);   // read the input pin
     time_now=millis();
     if(val_button0==true)
     {
@@ -552,6 +615,11 @@ void loop()
                   servo_target=out;
                   control_input=1;
                 }
+                else if(state==STATE4)
+                {
+                  desired_angle=out;
+                  control_input=1;
+                }
                 break;
                 case 'p':                
                 p_gain=(float)out;
@@ -632,9 +700,8 @@ void loop()
 //      Serial.print(ultraCM);
 //      Serial.print("ucm");
 //      Serial.println();
-//      Serial.print(filtered_ultra);
 //      Serial.print("fcm");
-//      Serial.println();
+//      Serial.println(filtered_ultra);
       /**********************************/
 
      
@@ -655,6 +722,8 @@ void loop()
       //degree per sec
       speed_actual=(encoder_count-last_encoder_count)/dt;
       last_encoder_count=encoder_count;
+//      Serial.print("Speed:");
+//      Serial.println(speed_actual);
 
       send_telemetry();
 
@@ -670,9 +739,9 @@ void loop()
 
             //clear some variables
             encoder_count=0;
+            last_encoder_count=0;
             target_pos=0;
             integrator=0;
-            last_encoder_count=0;
             speed_integrator=0;
             speed_target=0;
             break;
@@ -698,21 +767,28 @@ void loop()
             {
               integrator=integrator+error_pos*dt;
             }
-            
-            if(integrator>INT_MAX)
+
+            if(i_gain>0.1)
             {
-              integrator=INT_MAX;
-            }
-            else if(integrator<-INT_MAX)
-            {
-              integrator=-INT_MAX;
+              if(integrator*i_gain>INT_MAX)
+              {
+                integrator=INT_MAX/i_gain;
+              }
+              else if(integrator*i_gain<-INT_MAX)
+              {
+                integrator=-INT_MAX/i_gain;
+              } 
             }
       
-            control_out=p_gain*error_pos + i_gain*integrator -d_gain*speed_actual;
+            control_out=p_gain*error_pos + i_gain*integrator;
             run_motor();
 
             speed_integrator=0;
             speed_target=0;
+//            Serial.print("current_pos:");
+//            Serial.println(current_pos);
+//            Serial.print("control_out:");
+//            Serial.println(control_out);
             break;
 
         //DC motor speed control + potentiometer
@@ -837,6 +913,47 @@ void loop()
 
         //Stepper motor + force sensor
         case STATE4:
+
+            digitalWrite(DIR, HIGH);
+
+          fsrReading = analogRead(fsrPin); 
+          
+          // analog voltage reading ranges from about 0 to 1023 which maps to 0V to 5V (= 5000mV)
+          fsrVoltage = map(fsrReading, 0, 1023, 0, 5000);
+          
+          // The voltage = Vcc * R / (R + FSR) where R = 10K and Vcc = 5V
+          // so FSR = ((Vcc - V) * R) / V        yay math!
+          fsrResistance = 5000 - fsrVoltage;     // fsrVoltage is in millivolts so 5V = 5000mV
+          fsrResistance *= 10000;                // 10K resistor
+          fsrResistance /= fsrVoltage;
+          fsrConductance = 1000000;           // we measure in micromhos so 
+          fsrConductance /= fsrResistance; 
+          
+          // Use the two FSR guide graphs to approximate the force
+          if (fsrConductance <= 1000) {
+            fsrForce = fsrConductance / 80;
+        //      Serial.print("Force in Newtons: ");
+        //      Serial.println(fsrForce);      
+          } else {
+            fsrForce = fsrConductance - 1000;
+            fsrForce /= 30;
+        //      Serial.print("Force in Newtons: ");
+        //      Serial.println(fsrForce);            
+          }
+          
+          int time_on = 500 + fsrForce * 10;
+        //    Serial.println(time_on);
+
+            if(control_input==0)
+            {
+              desired_angle = fsrForce*3;
+            }
+            
+            step_size = int (stepsPerRevolution * desired_angle / 360.0);  
+            Serial.println(desired_angle);
+            Serial.println(step_size);
+            myStepper.step(step_size);
+        
             encoder_count=0;
             target_pos=0;
             integrator=0;
@@ -847,6 +964,20 @@ void loop()
       }      
         /**************************/
     }
+
+    static int loop_tele=0;
+    if(loop_tele>=10)
+    {
+      loop_tele=0;
+
+      send_telemetry();
+    }
+    else
+    {
+      loop_tele++;
+    }
+
+    
 }
 
 
