@@ -435,7 +435,7 @@ void  send_telemetry()
         S=3;
         break;
     case STATE4:
-        M=desired_angle;
+        M=current_angle;
         D=fsrForce;
         S=4;
         break;
@@ -852,7 +852,7 @@ void loop()
           IRvolt = map(filtered_IR,0,1023,0,5000);
           IRvolt1 = IRvolt/1000.0;
           IRdistance = 23.4 * IRvolt1 * IRvolt1 -115.7*IRvolt1 + 156.2; // from transfer function
-          tmppos = map(IRdistance,40.0,70.0,0.0,18.0)*10;
+          tmppos = map(IRdistance,40.0,70.0,0.0,180.0);
 
           if(control_input==0)
           {
@@ -932,17 +932,19 @@ void loop()
                step_size = int (stepsPerRevolution * desired_angle / 360.0);  
 //             Serial.println(desired_angle);
 //             Serial.println(step_size);
-               myStepper.step(step_size);               
+               myStepper.step(step_size);
+
+               current_angle+=desired_angle;
             }
-            else
+            else if(desired_angle>=0)
             {
-              step_size = int (stepsPerRevolution * desired_angle / 360.0);  
+              step_size = int (stepsPerRevolution * (desired_angle-current_angle) / 360.0);  
               myStepper.step(step_size);
-              current_angle+=(int)desired_angle;
+              current_angle+=(int)(desired_angle-current_angle);
               desired_angle=0;
             }
             
-            current_angle+=desired_angle;
+            
             if(current_angle>360)
             {
               current_angle=(int)(current_angle)%360;
