@@ -43,10 +43,10 @@
 #define ENCODER2  (4)
 #define SPEED_CONTROL_PIN   (6)
 
-#define P_GAIN      (2.0)
-#define I_GAIN      (0.0)
-#define D_GAIN      (0.0)
-#define INT_MAX     (150.0)
+#define P_GAIN      (7.0)//(7.0)
+#define I_GAIN      (1.0)//(0.0)
+#define D_GAIN      (1.0)//(1.0)
+#define INT_MAX     (100.0)//(150.0)
 
 #define SPEED_I_GAIN    (0.7)
 #define SPEED_P_GAIN    (2.0)
@@ -194,6 +194,7 @@ float p_gain=P_GAIN;
 float i_gain=I_GAIN;
 float d_gain=D_GAIN;
 float int_max=INT_MAX;
+int d_component=0;
  /******************************/
 
 
@@ -469,7 +470,7 @@ void  send_telemetry()
   String string7 =  "#";  
 
   String string=string1 + string2 + string3 + string4 + string5 + string6 + string7;
-  Serial.println(string);
+//  Serial.println(string);
 }
 
 void setup()
@@ -559,7 +560,7 @@ void loop()
          str= Serial.readString();// read the incoming data as string
          start_parse=1;
          char ch=str[0];
-         if(ch=='d' || ch=='D' || ch=='p' || ch=='i' || ch=='s' || ch=='x' || ch=='X' || ch=='S')
+         if(ch=='D' || ch=='p' || ch=='i' || ch=='s' || ch=='x' || ch=='X' || ch=='S' || ch=='g')
          {
             str2=str;
             str2.replace(ch,'0');
@@ -589,6 +590,7 @@ void loop()
                 {
                   target_pos=out;
                   control_input=1;
+                  integrator=0;
                 }
                 else if(state==STATE2)
                 {
@@ -624,7 +626,7 @@ void loop()
                 case 'g':
                 d_gain=(float)out;
                 Serial.print("\nDgain:");
-                Serial.print(out);
+                Serial.print(d_gain);
                 break;
                 case 'S':
                 
@@ -769,8 +771,18 @@ void loop()
                 integrator=-INT_MAX/i_gain;
               } 
             }
+
+            d_component=d_gain*speed_actual;
+            if(d_component>200)
+            {
+              d_component=200;
+            }
+            else if(d_component<-200)
+            {
+              d_component=-200;
+            }
       
-            control_out=p_gain*error_pos + i_gain*integrator;
+            control_out=p_gain*error_pos + i_gain*integrator -d_component;
             run_motor();
 
             speed_integrator=0;
@@ -980,10 +992,19 @@ void loop()
         /**************************/
     }
 
+//  10Hz loop
     static int loop_tele=0;
     if(loop_tele>=10)
     {
       loop_tele=0;
+
+      Serial.print("\nError:");
+      Serial.print(error_pos);
+      Serial.print("\nTargetpos:");
+      Serial.print(target_pos);
+      Serial.print("\ncurrentpos:");
+      Serial.print(current_pos);
+      Serial.println();
 
       send_telemetry();
     }
