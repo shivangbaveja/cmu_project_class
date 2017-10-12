@@ -10,9 +10,6 @@
  * 11 Blue LED channel
  * 
  * 
- * References:
- * Timer library taken from this site:
- * https://playground.arduino.cc/Code/Timer1
  * 
  * Other websites referred:
  * https://www.arduino.cc/en/Reference/DigitalRead
@@ -21,14 +18,13 @@
  * 
  */
 
-#include "TimerOne.h" 
 //#include "PinChangeInt.h"
 #include <Servo.h>
 #include <medianFilter.h>
 
 
 /******************************* Start of Macro definitions**************************************/
-#define BAUD 9600
+#define BAUD 38400
 #define PIN_BUTTON0 (2)
 #define ENCODER1    (3)
 #define POTENTIOMETER (0)
@@ -42,14 +38,14 @@
 
 #define P_GAIN      (5.0)
 #define I_GAIN      (0.0)
-#define D_GAIN      (1.0)
+#define D_GAIN      (0.0)
 #define INT_MAX     (150.0)
 
 #define SPEED_I_GAIN    (0.7)
 #define SPEED_P_GAIN    (2.0)
 #define SPEED_INT_MAX   (150)
 
-#define DEBOUNCE_DELAY  20000     //micro sec
+#define DEBOUNCE_DELAY  20     //micro sec
 
 /******************************* End of MACRO definitions********************************/
 
@@ -71,13 +67,15 @@ typedef enum
  * Hari's servo IR integration
  */
 const int ir=A1;
-const int servo=9;
-float IRinput[25];
+const int servo=10;
+//float IRinput[25];
 float IRdistance;
 float IRvolt,IRvolt1;
 float tmppos;
 int pos;
 Servo myservo; 
+int servo_target=0;
+float filtered_IR=0;
  /**************************/
 
 STATE state=STATE0;
@@ -135,13 +133,15 @@ long last_encoder_count=0;
  const int ultraPin = ULTRASONIC_PIN;
  long ultraPulse, ultraInches;
 long ultraCM;
-medianFilter Filter;
+medianFilter Filter,Filter_IR;
 int filtered_ultra=0;
 /*******************************End of golobal Variable section *****************************/
 
 /*
  * PID control
  */
+int control_input=0;      //0 sensor controlled, 1 user controlled
+ 
 float error_pos=0;
 int target_pos=0;
 int current_pos=0;
@@ -171,6 +171,7 @@ float int_max=INT_MAX;
 
 void change_state()
 {
+  control_input=0;
   switch(state)
   {
     case STATE0:
@@ -191,13 +192,12 @@ void change_state()
   }
 
   Serial.print("State");
-  Serial.print(state);
-  Serial.print("\r");
+  Serial.println(state);
 }
 
 void button0_pressed()
 {
-    button0_press_start_time=Timer1.read();
+    button0_press_start_time=millis();
     button0_rise_detected=1;
 }
 
@@ -347,14 +347,82 @@ void sort(float a[])
 }
 /*********************/
 
+void  send_telemetry()
+{
+  int M=0,D=0,S=0;
+  switch(state)
+  {
+    case STATE0:
+        M=0;
+        D=0;
+        S=0;
+        break;
+    case STATE1:
+        M=current_pos;
+        D=filtered_ultra;
+        S=1;
+        break;
+    case STATE2:
+        M=speed_actual;
+        D=potVolt;
+        S=2;
+        break;
+    case STATE3:
+        M=servo_target;
+        D=IRdistance;
+        S=3;
+        break;
+    case STATE4:
+        M=current_pos;
+        D=filtered_ultra;
+        S=4;
+        break;
+  }
+
+  D=890;
+  M=78;
+  
+
+  if(M>=500)
+  {
+    M=500;
+  }
+  else if(M<0)
+  {
+    M=0;
+  }
+
+  if(D>=500)
+  {
+    D=500;
+  }
+  else if(D<0)
+  {
+    D=0;
+  }
+  
+  String string1 = "S";                                     // using a constant String
+  String string2 =  String(S);
+  String string3 = "M";                                     // using a constant String
+  String string4 =  String(M);
+  String string5 = "D";                                     // using a constant String
+  String string6 =  String(D);  
+  String string7 =  "#";  
+
+  String string=string1 + string2 + string3 + string4 + string5 + string6 + string7;
+//  Serial.println(string);
+}
+
 void setup()
 {
     Filter.begin();
+    Filter_IR.begin();
     /*
      * Hari's code
      */
      // put your setup code here, to run once:
-      myservo.attach(9);
+      // put your setup code here, to run once:
+      myservo.attach(servo);
       myservo.write(0);
       pinMode(ir, INPUT);
       /****************************/
@@ -384,34 +452,24 @@ void setup()
     attachInterrupt(digitalPinToInterrupt(button0_pin), button0_pressed, RISING);
     attachInterrupt(digitalPinToInterrupt(ENCODER1), encoder1_change, CHANGE);  
 
-    //initialize timer
-    Timer1.initialize();
-    Timer1.stop();        //stop the counter
-    Timer1.restart();     //set the clock to zero
-
     Serial.print("State");
     Serial.print(state);
-    Serial.print("\r");
+    Serial.println("\r");
 }
 
 void loop()
 {
     //setting loop flag at 5Hz
-    long time_now=Timer1.read();
-    if((time_now-loop_last_time)>20000)
-    {
-      loop_run_flag=1;
-      loop_last_time=time_now;
-    }
-    else if((time_now<loop_last_time) && ((1000000+time_now-loop_last_time)>20000))
+    long time_now=millis();
+    if((time_now-loop_last_time)>20)
     {
       loop_run_flag=1;
       loop_last_time=time_now;
     }
 
-    val_button0 = digitalRead(button0_pin);   // read the input pin
-    time_now=Timer1.read();
-    if(val_button0==1)
+    bool val_button0=PIND & B00000100;   // read the input pin
+    time_now=millis();
+    if(val_button0==true)
     {
       if(button0_rise_detected==1)
       {
@@ -419,14 +477,10 @@ void loop()
         {
            button0_press_time=time_now-button0_press_start_time;
         }
-        else
-        {
-           button0_press_time=1000000+time_now-button0_press_start_time;
-        }
         
         if(button0_press_time>DEBOUNCE_DELAY)
         {
-          change_state();          
+          change_state();   
           button0_press_time=0;
           button0_press_start_time=time_now;
           button0_rise_detected=0;
@@ -434,14 +488,12 @@ void loop()
       }
     }
 
-//    delay(5);
-
     while(Serial.available()) 
     {
          str= Serial.readString();// read the incoming data as string
          start_parse=1;
          char ch=str[0];
-         if(ch=='d' || ch=='D' || ch=='p' || ch=='i' || ch=='s')
+         if(ch=='d' || ch=='D' || ch=='p' || ch=='i' || ch=='s' || ch)
          {
             str2=str;
             str2.replace(ch,'0');
@@ -467,12 +519,39 @@ void loop()
                 case 'd':
                 Serial.print("\nReceived target:");
                 Serial.print(out);
-                target_pos=out;
+
+                if(state==STATE1)
+                {
+                  target_pos=out;
+                  control_input=1;
+                }
+                else if(state==STATE2)
+                {
+                  
+                }
+                else if(state==STATE3)
+                {
+                  servo_target=out;
+                  control_input=1;
+                }
                 break;
                 case 'D':
                 Serial.print("\nReceived target:");
                 Serial.println(out);
-                target_pos=out;
+                 if(state==STATE1)
+                {
+                  target_pos=out;
+                  control_input=1;
+                }
+                else if(state==STATE2)
+                {
+                  
+                }
+                else if(state==STATE3)
+                {
+                  servo_target=out;
+                  control_input=1;
+                }
                 break;
                 case 'p':                
                 p_gain=(float)out;
@@ -490,9 +569,27 @@ void loop()
                 Serial.print(out);
                 break;
                 case 's':
-                speed_target=(float)out;
+                
                 Serial.print("\nST:");
                 Serial.print(speed_target);
+                
+                 if(state==STATE1)
+                {
+                }
+                else if(state==STATE2)
+                {
+                  speed_target=(float)out;
+                  control_input=1;
+                }
+                else if(state==STATE3)
+                {                  
+                }
+                break;
+                case 'x':
+                control_input=0;
+                break;
+                case 'X':
+                control_input=0;
                 break;
               }
             }
@@ -555,6 +652,12 @@ void loop()
         dt=1;
       }
 
+      //degree per sec
+      speed_actual=(encoder_count-last_encoder_count)/dt;
+      last_encoder_count=encoder_count;
+
+      send_telemetry();
+
       switch(state)
       {
         //Motors off
@@ -579,8 +682,11 @@ void loop()
             /*
              * PID control
              */
-
-            target_pos=map(filtered_ultra,20,200,0,360);
+            if(control_input==0)
+            {
+              target_pos=map(filtered_ultra,20,200,0,360);
+            }
+            
             current_pos=encoder_count;
             error_pos=target_pos-current_pos;
       
@@ -602,7 +708,7 @@ void loop()
               integrator=-INT_MAX;
             }
       
-            control_out=p_gain*error_pos + i_gain*integrator;
+            control_out=p_gain*error_pos + i_gain*integrator -d_gain*speed_actual;
             run_motor();
 
             speed_integrator=0;
@@ -618,14 +724,15 @@ void loop()
               potVolt=(float)potValue*5.0/1023.0;
               potNorm=potVolt/5.0;
 
-//              Serial.print("\rPot:");
-//              Serial.println(potNorm);
-              speed_target=100.0 + 200.0*potNorm;
+//            Serial.print("\rPot:");
+//            Serial.println(potNorm);
+              if(control_input==0)
+              {
+                speed_target=100.0 + 200.0*potNorm;
+              }
             /*********************************/
 
-            //degree per sec
-            speed_actual=(encoder_count-last_encoder_count)/dt;
-            last_encoder_count=encoder_count;
+        
 
 //            Serial.print("\rSpeed_actual:");
 //            Serial.println(speed_actual);
@@ -674,40 +781,46 @@ void loop()
 
           // put your main code here, to run repeatedly:
   
-          for (int i=0; i<25; i++)
-          {
-              // Read analog value
-              IRinput[i] = analogRead(ir);
-          }   
-          sort(IRinput);
+//          for (int i=0; i<25; i++)
+//          {
+//              // Read analog value
+//              IRinput[i] = analogRead(ir);
+//          }   
+//          sort(IRinput);
+
+          filtered_IR= Filter_IR.run(analogRead(ir));
           
-          IRvolt = map((IRinput[13]+IRinput[12])/2.0,0,1023,0,5000);
+          IRvolt = map(filtered_IR,0,1023,0,5000);
           IRvolt1 = IRvolt/1000.0;
-          
-          if(IRvolt1 >=0.85 && IRvolt1<=2.5)
+          IRdistance = 23.4 * IRvolt1 * IRvolt1 -115.7*IRvolt1 + 156.2; // from transfer function
+          tmppos = map(IRdistance,40.0,70.0,0.0,18.0)*10;
+
+          if(control_input==0)
           {
-            IRdistance = 23.4 * IRvolt1 * IRvolt1 -115.7*IRvolt1 + 156.2; // from transfer function
-            tmppos = map(IRdistance,40.0,70.0,0.0,18.0)*10;
-            //pos = (int) tmppos;
-            Serial.print(IRdistance);
-            Serial.println(tmppos);
-            myservo.write(tmppos);
-            if (tmppos==172.0)                                   
-            myservo.write(180.0);
-            //range is 0.85v to 2.5v
-          //distance range is 13.24cm to 74.75cm
-          //working range is 40 to 71cm
-                         
-          //delay for servo in site is 15ms
+            if(IRvolt1 >=0.85 && IRvolt1<=2.5)
+            {
+              servo_target=tmppos;
+              //pos = (int) tmppos;
+                Serial.print(IRdistance);
+                Serial.println(servo_target);
+//                myservo.write(servo_target);
+              //range is 0.85v to 2.5v
+              //distance range is 13.24cm to 74.75cm
+              //working range is 40 to 71cm
+                           
+            //delay for servo in site is 15ms
             }
             else
             {
               IRdistance=-100;
             }
-
-
-
-
+          }
+          else
+          {
+            Serial.print("\nhere");
+//            myservo.write(100);
+          }
+          
             //SHUT MOTORS
             stop_motor();
 
@@ -720,35 +833,18 @@ void loop()
             last_encoder_count=0;
             speed_integrator=0;
             speed_target=0;
-           
             break;
 
         //Stepper motor + force sensor
         case STATE4:
-            
+            encoder_count=0;
+            target_pos=0;
+            integrator=0;
+            last_encoder_count=0;
+            speed_integrator=0;
+            speed_target=0;
             break;
-      }
-      
-      
-//      //5Hz loop
-//      hz5_loop++;
-//      if(hz5_loop>10)
-//      {
-//        hz5_loop=0;
-//      }
-//      
-//      /*
-//       * Slow loop 1Hz
-//       */
-//      static int motor_dir=1;
-//      if(hz1_loop>=50)
-//      {
-//        hz1_loop=0;
-//      }
-//      else
-//      {
-//        hz1_loop++;
-//      }
+      }      
         /**************************/
     }
 }
